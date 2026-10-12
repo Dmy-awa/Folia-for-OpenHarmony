@@ -2,6 +2,7 @@
   <img src="AppScope/resources/base/media/app_icon.png" width="104" alt="Folia for HarmonyOS">
   <h1>Folia for HarmonyOS</h1>
   <p><b>辞曲新境</b> · 鸿蒙原生沉浸式歌词音乐播放器</p>
+  <p>该项目移植还未结束，如果您有什么好的想法或建议欢迎提交Issues</p>
   <p><a href="https://github.com/chthollyphile/folia-major">Folia</a> 桌面版的 HarmonyOS NEXT 移植</p>
 </div>
 
