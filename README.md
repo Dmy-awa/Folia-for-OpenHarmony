@@ -16,16 +16,6 @@
 </div>
 
 ---
-
-## ⚠️ 先读这段
-
-> **本项目尚未在编译器或真机上验证过。**
->
-> 代码是在没有 DevEco Studio、没有 ArkTS 编译器的环境中编写的。
-> 所有鸿蒙 API 用法都对照 SDK 声明文件（185 个符号）与官方文档逐条核对，
-> 并做了导入 / 资源 / 禁用构造 / `build()` 根容器的静态检查，
-> 但 **`Build` 从来没有成功跑过一次**，首次编译大概率需要修若干类型错误。
->
 > 详细的可信度说明见 **[docs/VERIFICATION.md](docs/VERIFICATION.md)**。
 > 如果你编译时遇到错误，欢迎提 issue 附上日志。
 
@@ -86,16 +76,6 @@
 | 蓝牙 / 有线耳机按键 | `avSession` 的 `handleKeyEvent` | ✅ | ✅ 已实现 |
 | 实况窗 `liveViewManager.startLiveView` | `@kit.LiveViewKit` | ❌ **音乐场景不可用** | ❌ 有意未实现 |
 
-**为什么不能用 LiveViewKit：**
-
-- `event` 枚举只有 11 个场景（`TAXI / DELIVERY / FLIGHT / TRAIN / QUEUE / PICK_UP /
-  SCORE / RENT / TIMER / WORKOUT / NAVIGATION`）——**没有音乐**；
-- `LayoutType` 只有 5 种布局，**没有媒体模板**；
-- 接入需走 AGC 场景权益申请（要求应用已上架 + MAU ≥ 1000，约 15 个工作日评审），
-  音乐不属于可申请场景；
-- ⚠️ 网上流传的 `event: 'PLAYBACK'` 写法**不在官方枚举中**，
-  照抄会直接返回 `1003500013 Invalid event type`。
-
 **结论**：接入 AVSession 后，系统会据此自动渲染控制栏卡片、锁屏卡片与实况胶囊——
 零审批、零 UI 代码。这正是主流音乐平台（华为音乐、酷狗、QQ 音乐）的做法。
 完整证据链见 [`docs/hos-api/liveview.md`](docs/hos-api/liveview.md)。
@@ -142,8 +122,7 @@
 - **全局横屏**：`module.json5` 的 `orientation: landscape` +
   `preferMultiWindowOrientation: landscape` + 运行时 `setPreferredOrientation`。
   ⚠️ **PC / 2in1 上方向锁不生效**（自由窗口模型），代码会主动跳过并要求布局能接受任意宽高比。
-- **四形态适配**：`deviceTypes: ["phone", "tablet", "2in1", "default"]`
-  （`2in1` 就是鸿蒙电脑的官方值，**不存在 `pc`**）；
+- **四形态适配**：`deviceTypes: ["phone", "tablet", "2in1", "default"]`；
   断点 `xs/sm/md/lg` 驱动布局，`lg` 下播放页展开右侧队列面板、曲库变双栏。
 - **AVSession 激活顺序是硬约束**：
   `createAVSession → setAVMetadata → setAVPlaybackState → 注册命令 → activate()`。
