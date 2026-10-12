@@ -1,0 +1,25 @@
+# Define project specific obfuscation rules here.
+# You can include the obfuscation configuration files in the current module's build-profile.json5.
+#
+# For more details, see
+#   https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/source-obfuscation
+
+# Keep the JSON field names used by the online music providers and the local
+# library database: they are serialized/deserialized reflectively at runtime.
+-enable-property-obfuscation
+-keep-property-name
+assetId
+title
+artist
+album
+duration
+coverUrl
+lyricUrl
+provider
+songId
+parent
+children
+
+# ArkTS boilerplate
+-keep-global-name
+-keep-file-name

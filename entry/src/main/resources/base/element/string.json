@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Folia 鸿蒙版主模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "辞曲新境 · 沉浸式全屏歌词音乐播放器"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Folia"
+    },
+    {
+      "name": "reason_internet",
+      "value": "用于搜索、试听与播放来自在线音乐服务的歌曲与歌词"
+    },
+    {
+      "name": "reason_network_info",
+      "value": "用于判断当前网络状态并选择合适的音质"
+    },
+    {
+      "name": "reason_keep_running",
+      "value": "用于在应用退到后台时继续播放音乐并在播控中心显示歌曲信息"
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------------------
+# GitHub Actions：使用「公开 OpenHarmony SDK」在 ubuntu Runner 上构建 HAP
+#
+# ⚠️ 这是一个模板：请复制到  .github/workflows/build-hap-openharmony.yml  后才会生效。
+#    不要与 build-hap-selfhosted.yml 同时启用（两者互斥，见 ci/README.md）。
+#
+# 优点：完全免费、无需任何账号、无需自托管机器，能真正跑通编译。
+# 缺点：产出的 HAP 用 OpenHarmony 调试签名，只能安装到
+#       **OpenHarmony 设备 / DevEco 的 OpenHarmony 模拟器**，
+#       **不能**安装到鸿蒙 NEXT 手机（手机要求华为签发的证书）。
+#
+# 因此这个流水线的主要价值是：持续验证「代码能不能编译过」。
+# 需要手机可安装的 HAP 时，请用 github-actions-selfhosted.yml。
+#
+# 注意：OpenHarmony SDK 压缩包约 4 GB，务必保留 cache 步骤，否则每次都要重下。
+# ---------------------------------------------------------------------------
+name: Build HAP (OpenHarmony public SDK)
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 可在 https://repo.huaweicloud.com/openharmony/os/ 查看全部可用版本
+  OHOS_SDK_VERSION: 5.0.2-Release
+  OHOS_SDK_CACHE: ${{ github.workspace }}/.ohos-sdk-cache
+
+jobs:
+  build-hap-openharmony:
+    name: 构建 HAP（OpenHarmony SDK）
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # 4 GB 的 SDK，缓存命中时能省下大部分时间
+      - name: 缓存 OpenHarmony SDK
+        id: sdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OHOS_SDK_CACHE }}
+          key: ohos-sdk-${{ env.OHOS_SDK_VERSION }}
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends curl tar unzip zip
+
+      - name: 构建 HAP
+        run: |
+          chmod +x scripts/*.sh
+          WORK_DIR="${{ env.OHOS_SDK_CACHE }}" \
+          ./scripts/ci-build-hap.sh \
+            --sdk-type openharmony \
+            --sdk-version "${{ env.OHOS_SDK_VERSION }}" \
+            --build-mode debug
+
+      - name: 收集产物
+        run: |
+          mkdir -p out
+          find entry/build -type f -name '*.hap' -exec cp {} out/ \; 2>/dev/null || true
+          ls -lh out/ || true
+          if [ -z "$(ls -A out 2>/dev/null)" ]; then
+            echo "::error::没有收集到任何 .hap"
+            exit 1
+          fi
+
+      - name: 上传 HAP 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-openharmony-hap
+          path: out/*.hap
+          if-no-files-found: error
+          retention-days: 30

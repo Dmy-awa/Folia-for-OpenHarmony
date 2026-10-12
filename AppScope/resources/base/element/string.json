@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "Folia"
+    },
+    {
+      "name": "app_description",
+      "value": "辞曲新境 · 沉浸式全屏歌词音乐播放器"
+    }
+  ]
+}

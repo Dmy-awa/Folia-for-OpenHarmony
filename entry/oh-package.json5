@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "Folia HarmonyOS entry module",
+  "main": "",
+  "author": "",
+  "license": "AGPL-3.0",
+  "dependencies": {}
+}

@@ -1,0 +1,76 @@
+# ---------------------------------------------------------------------------
+# Gitee Go 流水线：构建鸿蒙 HAP
+#
+# ⚠️ 注意：Gitee Go 的流水线 schema 会随版本演进，下面的键名（triggers /
+#    stages / jobs / steps / step / run）按常见写法给出，但**可能与你的
+#    账号当前版本不完全一致**。请对照 Gitee Go 的「流水线语法」文档校对一次。
+#    真正的构建逻辑全部在 scripts/ci-build-hap.sh 里，YAML 只是薄薄一层壳，
+#    即使键名要调整也很容易改。
+#
+# 放置位置：仓库根目录 .workflow/build-hap.yml
+#
+# 与 GitHub Actions 两个方案对应关系：
+#   - 若 runner 上预装了 DevEco Studio：把 --sdk-type 改成 harmonyos，
+#     并配置签名材料环境变量（SIGN_*），产物可装鸿蒙 NEXT 手机。
+#   - 若使用 Gitee 提供的公共构建机：只能走 --sdk-type openharmony，
+#     产物只能装 OpenHarmony 设备/模拟器，但能持续验证编译是否通过。
+# ---------------------------------------------------------------------------
+name: build-hap
+displayName: 构建鸿蒙 HAP
+
+triggers:
+  push:
+    branches:
+      include:
+        - master
+        - main
+  pull_request:
+    branches:
+      include:
+        - master
+        - main
+
+stages:
+  - stage: build
+    displayName: 构建阶段
+    jobs:
+      - job: build-hap
+        displayName: 构建 HAP 安装包
+        timeout: 90
+        steps:
+          - step: checkout
+            name: 检出代码
+
+          - step: run
+            name: 安装构建依赖
+            script: |
+              set -e
+              sudo apt-get update || true
+              sudo apt-get install -y --no-install-recommends curl tar unzip zip || true
+              node --version || true
+
+          - step: run
+            name: 构建 HAP
+            script: |
+              set -e
+              chmod +x scripts/*.sh
+              # 使用华为云公开镜像的 OpenHarmony SDK（免账号）
+              # 预装 DevEco Studio 的机器请改成：--sdk-type harmonyos
+              WORK_DIR="$PWD/.ohos-sdk-cache" \
+              ./scripts/ci-build-hap.sh \
+                --sdk-type openharmony \
+                --sdk-version 5.0.2-Release \
+                --build-mode debug
+
+          - step: run
+            name: 收集产物
+            script: |
+              set -e
+              mkdir -p out
+              find entry/build -type f -name '*.hap' -exec cp {} out/ \; 2>/dev/null || true
+              ls -lh out/ || true
+
+          - step: artifacts
+            name: 上传 HAP
+            path: out/*.hap
+            if-no-files-found: error

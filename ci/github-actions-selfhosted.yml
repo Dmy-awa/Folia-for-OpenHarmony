@@ -1,0 +1,159 @@
+# ---------------------------------------------------------------------------
+# GitHub Actions：使用「自托管 Runner + DevEco Studio SDK」构建鸿蒙 HAP
+#
+# ⚠️ 这是一个模板：请复制到  .github/workflows/build-hap-selfhosted.yml  后才会生效。
+#    不要与 build-hap-openharmony.yml 同时启用（两者互斥，见 ci/README.md）。
+#
+# 这是唯一能产出「可安装到鸿蒙 NEXT 手机」的 HAP 的 CI 方案，因为：
+#   - 手机侧安装要求 HAP 由华为签发的证书 + provisioning profile 签名；
+#   - 这些材料只能通过 DevEco Studio 的自动签名（登录华为开发者账号）生成。
+# 因此 Runner 上必须预装 DevEco Studio，并把签名材料放入仓库 secrets。
+#
+# 使用前：
+#   1. 准备一台 Windows 机器作为 self-hosted runner，打上 harmonyos 标签；
+#   2. 在该机器上安装 DevEco Studio，并设置环境变量 DEVECO_SDK_HOME；
+#   3. 在 DevEco 中打开本工程，用「自动生成签名」生成一次签名材料，然后：
+#        Linux:  base64 -w0 app.p12
+#        macOS:  base64 -i app.p12
+#        Windows: [Convert]::ToBase64String([IO.File]::ReadAllBytes("app.p12"))
+#      把输出存为以下 secrets：
+#        SIGN_KEYSTORE_B64 / SIGN_APP_CERT_B64 / SIGN_PROFILE_B64
+#        SIGN_KEYSTORE_PWD / SIGN_KEY_ALIAS / SIGN_KEY_PWD
+#      未配置时流程照常运行，只是产物为未签名包。
+#
+# 参考 docs/BUILD.md 第 4、6 节。
+# ---------------------------------------------------------------------------
+name: Build HarmonyOS HAP (self-hosted)
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_mode:
+        description: '构建模式'
+        required: true
+        default: debug
+        type: choice
+        options: [debug, release]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-hap:
+    name: 构建 HAP
+    # 需要一台打了 harmonyos 标签的自托管 runner
+    runs-on: [self-hosted, harmonyos]
+    timeout-minutes: 60
+
+    env:
+      # 注意：secrets 不能直接写进 if 条件，先落到 env 再判断
+      SIGNING_ENABLED: ${{ secrets.SIGN_KEYSTORE_B64 != '' }}
+      SIGN_DIR: ${{ runner.temp }}/folia-signing
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 检查构建环境
+        shell: pwsh
+        run: |
+          Write-Host "node: $(node --version)"
+          Write-Host "DEVECO_SDK_HOME: $env:DEVECO_SDK_HOME"
+          if (-not $env:DEVECO_SDK_HOME) {
+            Write-Error "未设置 DEVECO_SDK_HOME。请在该 runner 上安装 DevEco Studio 并导出该变量。"
+            exit 1
+          }
+          if (-not (Test-Path $env:DEVECO_SDK_HOME)) {
+            Write-Error "DEVECO_SDK_HOME 指向的目录不存在：$env:DEVECO_SDK_HOME"
+            exit 1
+          }
+
+      - name: 确认签名材料是否就绪
+        shell: pwsh
+        run: |
+          if ("${{ env.SIGNING_ENABLED }}" -eq "true") {
+            Write-Host "已配置签名 secrets，将产出已签名 HAP。"
+          } else {
+            Write-Warning "未配置签名 secrets（SIGN_KEYSTORE_B64 为空），将只产出未签名包。"
+          }
+
+      - name: 还原签名材料
+        if: env.SIGNING_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $dir = "${{ env.SIGN_DIR }}"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+
+          [IO.File]::WriteAllBytes("$dir\app.p12",     [Convert]::FromBase64String("${{ secrets.SIGN_KEYSTORE_B64 }}"))
+          [IO.File]::WriteAllBytes("$dir\app.cer",     [Convert]::FromBase64String("${{ secrets.SIGN_APP_CERT_B64 }}"))
+          [IO.File]::WriteAllBytes("$dir\profile.p7b", [Convert]::FromBase64String("${{ secrets.SIGN_PROFILE_B64 }}"))
+
+          Write-Host "签名材料已还原到 $dir"
+          Get-ChildItem $dir | Select-Object Name, Length
+
+      - name: 构建（未签名）
+        if: env.SIGNING_ENABLED != 'true'
+        shell: pwsh
+        run: |
+          $mode = '${{ github.event.inputs.build_mode }}'
+          if (-not $mode) { $mode = 'debug' }
+          & .\scripts\build-hap.ps1 -BuildMode $mode -Clean
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: 构建并签名
+        if: env.SIGNING_ENABLED == 'true'
+        shell: pwsh
+        env:
+          SIGN_KEYSTORE_PWD: ${{ secrets.SIGN_KEYSTORE_PWD }}
+          SIGN_KEY_ALIAS: ${{ secrets.SIGN_KEY_ALIAS }}
+          SIGN_KEY_PWD: ${{ secrets.SIGN_KEY_PWD }}
+        run: |
+          $mode = '${{ github.event.inputs.build_mode }}'
+          if (-not $mode) { $mode = 'debug' }
+          $dir = "${{ env.SIGN_DIR }}"
+
+          & .\scripts\build-hap.ps1 -BuildMode $mode -Clean -Sign `
+              -Keystore     "$dir\app.p12" `
+              -KeystorePwd  "$env:SIGN_KEYSTORE_PWD" `
+              -KeyAlias     "$env:SIGN_KEY_ALIAS" `
+              -KeyPwd       "$env:SIGN_KEY_PWD" `
+              -AppCert      "$dir\app.cer" `
+              -Profile      "$dir\profile.p7b"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: 收集产物
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Get-ChildItem entry\build -Recurse -File -Filter '*.hap' -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              Copy-Item $_.FullName (Join-Path out $_.Name) -Force
+              Write-Host "收集 $($_.Name)"
+            }
+          if (-not (Get-ChildItem out -File -ErrorAction SilentlyContinue)) {
+            Write-Error "没有收集到任何 .hap"
+            exit 1
+          }
+
+      - name: 上传 HAP 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-harmonyos-hap
+          path: out/*.hap
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 清理签名材料
+        if: always()
+        shell: pwsh
+        run: |
+          $dir = "${{ env.SIGN_DIR }}"
+          if (Test-Path $dir) {
+            Remove-Item -Recurse -Force $dir
+            Write-Host "已清理临时签名材料"
+          }
